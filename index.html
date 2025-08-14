@@ -3,9 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reconocimiento de Rostro</title>
+    <title>Reconocimiento Facial con face-api.js</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 300px;
+            height: 300px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        canvas {
+            position: absolute;
+        }
+    </style>
 </head>
 <body>
-    Hola Mundo!
+    <div style="position: relative; width: 300px; height: 300px;">
+        <video id="video" width="300" height="300" autoplay muted></video>
+    </div>
+    <div id="result">
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        
+        // Carga de los modelos de IA
+        Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri('./models'),
+            faceapi.nets.faceLandmark68Net.loadFromUri('./models')
+        ]).then(startVideo);
+
+        // Iniciar la cámara web
+        function startVideo() {
+            // Asegúrate de que el navegador obtenga un stream de video con las dimensiones deseadas
+            navigator.mediaDevices.getUserMedia({ video: { width: 300, height: 300 } })
+                .then(stream => {
+                    video.srcObject = stream;
+                })
+                .catch(err => {
+                    console.error("Error al acceder a la cámara:", err);
+                });
+        }
+        
+        // Escuchar el evento 'play' del video
+        video.addEventListener('play', () => {
+            const canvas = faceapi.createCanvasFromMedia(video);
+            canvas.style.border = '1px solid #000';
+            const container = document.querySelector('div');
+            container.append(canvas);
+            canvas.style.position = 'absolute';
+            canvas.style.top = '0';
+            canvas.style.left = '0';
+            
+            // Define el tamaño de visualización con las dimensiones exactas del video
+            const displaySize = { width: video.width, height: video.height };
+
+            // Ajusta el tamaño del canvas para que coincida con el video
+            faceapi.matchDimensions(canvas, displaySize);
+
+            // Bucle de detección en intervalos
+            async function onPlay() {
+                // inputSize - redimensiona internamente el frame antes de procesarlo.
+                // número (múltiplo de 32, como 160, 224, 320, 416, 512?)
+                // 160: pequeño.
+                // 320: mediano.
+                // 640: grande.
+
+                // scoreThreshold - nivel mínimo de confianza para que el detector considere que es un rostro.
+                // número entre 0 y 1.
+                // 0.3: más sensible (rostros lejanos o mal iluminados).
+                // 0.5: equilibrio.
+                // 0.7: más estricto.
+                const detections = await faceapi
+                    .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({
+                        inputSize: 224,
+                        scoreThreshold: 0.5
+                    }))
+                    .withFaceLandmarks();
+
+                const resized = faceapi.resizeResults(detections, displaySize);
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+                faceapi.draw.drawDetections(canvas, resized);
+                faceapi.draw.drawFaceLandmarks(canvas, resized);
+
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+
+                resizedDetections.forEach(det => {
+                    // Caja delimitadora del rostro en coordenadas del canvas
+                    const { x, y, width, height,aa } = det.detection.box; 
+                    document.getElementById("result").innerHTML = `Rostro detectado en: ${x.toFixed(1)}, ${y.toFixed(1)}, ${width.toFixed(1)}, ${height.toFixed(1)}`;
+                });
+
+                requestAnimationFrame(onPlay);
+            }
+            onPlay();
+        });
+    </script>
 </body>
 </html>
